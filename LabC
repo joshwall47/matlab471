@@ -1,0 +1,20 @@
+%compares experimental values of periodic oscillations with theoretical values. 
+
+clear all 
+m = .1402; r = 0.5; L = 1; %arbitrary values used in calculations can be changed 
+g = 9.8; %assumed gravitational downwards acceleration 
+Xexp = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45];
+Texp = [1.57, 1.54, 1.53, 1.53, 1.58, 1.69, 1.94, 2.63];
+Dexp = abs(Xexp-r);
+I0 = (1/12)*m*L^2;
+Iexp = I0 = m*Dexp.^2;
+y = g/(4*pi^2)*(Texp.^2).*Dexp;
+x = Dexp.^2;
+coefficient = polyfit(x,y,1);
+a = coefficient(1);
+Error = abs(1-a)*100;
+Xtheo = 0:0.01:0.45;
+D = abs(Xtheo - r);
+I = I0 +m*D.^2;
+Ttheo = 2*pi*sqrt(I./(m*g*D));
+plot(Xexp, Texp, 'o', Xtheo, Ttheo, '-');
