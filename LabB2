@@ -1,0 +1,35 @@
+%MatLab Repo #1
+clear all 
+y = [29, 31, 33.3]*10^-2; %arbitrary values for displacement in cm
+m = [0, 20, 40]*10^-3; %arbitrary values for mass in grams
+F = m*9.8; 
+coefficients = polyfit(y, F, 1);
+k = coefficients(1);
+b = coefficients(2);
+y = 0.02:0.01:0.4;
+ybestfit = k*y+b;
+
+Mexp = [10, 20, 30]/1000 + 50/1000;
+Texp = [11.85, 16.41, 18.47]/20;
+mm = .01:.001:.1;
+Ms = 180/1000;
+T1 = 2*pi*sqrt(mm/k);
+T2 = 2*pi*sqrt(mm/k + Ms/(3*k));
+plot(Mexp, Texp, 'O', mm, T1, '--', mm, T2, ':');
+
+T1_exp = 2*pi*sqrt(Mexp/k);
+Error1 = (Texp - T1_exp)./T1_exp*100;
+T2_exp = 2*pi*sqrt(Mexp/k + Ms(3*k));
+Error2 = (Texp - T2_exp)./T2_exp*100;
+plot(Mexp, Error1, 'y', Mexp, Error2, 'o');
+
+Tsquare = Texp.^2;
+plot(Mexp, Tsquare, 'o');
+coefffi = polyfit(Mexp, Tsquare, 1);
+a = coeffi(1);
+b = coeffi(2);
+MM = 0.01:0.001:0.1;
+ybestfit = a*MM+b;
+plot(Mexp, Tsquare, 'o', mm, ybestfit, ':');
+
+
