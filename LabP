@@ -1,0 +1,33 @@
+%examines photelectric effect and compares required stopping voltages
+
+Lexp = [447,502,546,656]*10^-9;
+Vread = [1.065,1.069,1.049;
+         0.568,0.600,0.620;
+         0.546,0.546,0.573;
+         0.440,0.339,0.321];
+
+Vexp = mean(Vread')
+c = 3.0*10^8;
+e = 1.6*10^-19;
+h =6.63*10^-34;
+fexp = c./Lexp;
+K = e*Vexp;
+Xexp = fexp*10^19*10^-34;
+Yexp = K*10^19;
+
+coeff = polyfit(Xexp,Yexp,1);
+m = coeff(1);
+b = coeff(2);
+Ybestfit = m*Xexp + b;
+phi = 2.7;
+WF = phi*10^-19/e;
+
+Xth = .01:0.001:0.8;
+Yth = (h/10^-34)*Xth - phi;
+Err = abs(m*10^-34-h)/h*100;
+plot(Xexp,Yexp);
+
+plot(Ybestfit);
+
+Yth_exp = (h/10^-34).*Xexp - phi;
+Err_rel = (Yexp - Yth_exp)./Yth_exp*100;
