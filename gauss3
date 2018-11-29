@@ -1,0 +1,510 @@
+%final simulation not my property nor owned by me 
+
+%FDTD Code Brian Egenriether
+clc
+clear
+clf
+nMax = 400;  %time steps
+scalefactor=1;
+
+
+mu =  1.2566306E-6;
+eps0 = 8.854E-12;
+epsr = 4.2;    
+
+cfln = 0.995; %stability criterion
+tw = 6; %half width of pulse  10 had low resonance
+n0 = 5*tw; %time delay for sources
+Lx = 0.08;
+Ly = 0.06;
+Lz = 0.048;
+
+nx = 80*scalefactor;
+ny =60*scalefactor;
+nz= 48*scalefactor;
+
+dx = Lx/nx;
+dy = Ly/ny;
+dz = Lz/nz;
+
+S=5.8e1;
+eps = eps0;
+%=========================Coefficients
+
+%====X
+cex1=zeros(nx,ny,nz);
+cex2=zeros(nx,ny,nz);
+cey1=zeros(nx,ny,nz);
+cey2=zeros(nx,ny,nz);
+cez1=zeros(nx,ny,nz);
+cez2=zeros(nx,ny,nz);
+for k = 1:nz 
+    for j = 1:ny
+        for i = 1:nx 
+            if k > nz/2  %anywhere above resonator
+                sig = 0;
+                
+            elseif k == nz/2 && i >= nx/4 && i <= 3*nx/4  && j >= ny/4 && j <= 3*ny/4   %resonator top surface
+                sig = S/2;
+           
+            elseif k < nz/2 && (i == nx/4 && i == 3*nx/4) &&  (j >= ny/4 || j <= 3*ny/4)  % resonator y side surfaces
+                sig = S/2;
+                
+            elseif k < nz/2 && (i >= nx/4 && i <= 3*nx/4) &&  (j == ny/4 || j == 3*ny/4)  % resonator x side surfaces
+                sig = S/2;
+                
+            elseif k <= nz/2 && i >= nx/4 && i < 3*nx/4  && j >= ny/4 && j <= 3*ny/4  %inside resonator
+                sig = S;
+            else
+                sig = 0;
+            end   
+            
+     c = 1/sqrt(mu*eps);
+     dt = cfln/(c*sqrt((1/dx)^2+(1/dy)^2+(1/dz)^2));
+     cex1(i,j,k) = (2*eps-sig*dt)/(2*eps+sig*dt); 
+     cex2(i,j,k) = (2*dt)/(2*eps+sig*dt);
+     cey1(i,j,k) = (2*eps-sig*dt)/(2*eps+sig*dt); 
+     cey2(i,j,k) = (2*dt)/(2*eps+sig*dt);
+     cez1(i,j,k) = (2*eps-sig*dt)/(2*eps+sig*dt); 
+     cez2(i,j,k) = (2*dt)/(2*eps+sig*dt);
+                  
+        end
+    end
+end
+
+
+
+cHxy = dt/(mu*dy);
+cHxz = dt/(mu*dz);
+cHyz = dt/(mu*dz);
+cHyx = dt/(mu*dx);
+cHzx = dt/(mu*dx);
+cHzy = dt/(mu*dy);
+
+%PEC Boundary conditoins
+%Set all tangential E fields to zero and never update them.  This will keep
+%them zero. Update loops only modify inner cells
+
+Hx=zeros(nx,ny,nz);
+Hy=zeros(nx,ny,nz);
+Hz=zeros(nx,ny,nz);
+Ex=zeros(nx,ny,nz);
+Ey=zeros(nx,ny,nz);
+Ez=zeros(nx,ny,nz);
+
+
+for n=1:nMax
+    %Define E field components at 3 seperate arbitrary points with Gaussian pulse 
+Ex(18*scalefactor,14*scalefactor,20*scalefactor)=.5*tw*exp(-((n-n0)/tw)^2); 
+Ey(25*scalefactor,45*scalefactor,30*scalefactor)=.5*tw*exp(-((n-n0)/tw)^2);  
+Ez(65*scalefactor,38*scalefactor,18*scalefactor)=.5*tw*exp(-((n-n0)/tw)^2); 
+
+%==================== Main update loops for the Magnetic fields:
+%===================Hx
+for k = 1:nz-1  %1->2 all 3
+    for j = 1:ny-1
+        for i = 1:nx %-1
+            Hx(i,j,k) = Hx(i,j,k)-cHxy*(Ez(i,j+1,k)-Ez(i,j,k))+cHxz*(Ey(i,j,k+1)-Ey(i,j,k));                                  
+        end
+    end
+end
+%===================Hy
+for k = 1:nz-1  %1->2 all 3
+    for j = 1:ny %-1
+        for i = 1:nx-1
+            Hy(i,j,k) = Hy(i,j,k)-cHyz*(Ex(i,j,k+1)-Ex(i,j,k))+cHyx*(Ez(i+1,j,k)-Ez(i,j,k));            
+        end
+    end
+end
+%===================Hz
+for k = 1:nz %-1  %1->2 all 3
+    for j = 1:ny-1
+        for i = 1:nx-1
+             Hz(i,j,k) = Hz(i,j,k)-cHzx*(Ey(i+1,j,k)-Ey(i,j,k))+cHzy*(Ex(i,j+1,k)-Ex(i,j,k));   
+        end
+    end
+end    
+
+
+
+%==================== Main update loops for the Electric fields:
+
+%===================Ex
+  for k = 2:nz-1
+      for j = 2:ny-1
+          for i = 1:nx-1 %1->2
+              Ex(i,j,k) = cex1(i,j,k)*Ex(i,j,k)+cex2(i,j,k)*((Hz(i,j,k)-Hz(i,j-1,k))/dy-(Hy(i,j,k)-Hy(i,j,k-1))/dz);                                  
+          end
+      end
+  end
+  %===================Ey
+  for k = 2:nz-1
+      for j = 1:ny-1
+          for i = 2:nx-1
+              Ey(i,j,k) = cey1(i,j,k)*Ey(i,j,k)+cex2(i,j,k)*((Hx(i,j,k)-Hx(i,j,k-1))/dz-(Hz(i,j,k)-Hz(i-1,j,k))/dx);
+          end
+      end
+  end  
+  %===================Ez
+  for k = 1:nz-1  %1->2
+    for j = 2:ny-1
+        for i = 2:nx-1
+            Ez(i,j,k) = cez1(i,j,k)*Ez(i,j,k)+cex2(i,j,k)*((Hy(i,j,k)-Hy(i-1,j,k))/dx-(Hx(i,j,k)-Hx(i,j-1,k))/dy);
+        end
+    end
+  end
+
+
+clc
+n/nMax*100
+
+clc
+round(n/nMax*100)   %gives progress update percentage on home screen
+
+surf(squeeze(Ex(28*scalefactor,:,:))); 
+set(gcf,'renderer','zbuffer')
+%hold on
+whitebg('black');
+grid off
+set(gcf,'Position',[20 50 1500 800]);
+axis([-10*scalefactor 60*scalefactor -20*scalefactor 70*scalefactor -.01/scalefactor .01/scalefactor])
+ view([3,4,5])
+ 
+Mov(n)=getframe; % comment this out for nonanimated analysis
+   
+   
+end
+movie(Mov,30,30);    % comment this out for nonanimated analysis
+
+
+%  whitebg('black');
+%   Gran=100;
+%   Xwave=(Ez(:,70,nz/2+10));
+%   nx = length(Xwave);
+%   NFFTx=Gran*nx;
+%   Fsx = 1/dx;         %spatial sampling frequency
+%   Nx = Lx*linspace(0,1,nx); %total space vector
+%   kx=Fsx*linspace(0,2*pi,NFFTx); %wavenumber vector
+%   fx = c*kx/(2*pi);     %frequency vector
+%   Yx = abs(fft(Xwave,NFFTx)/NFFTx);
+%   cutoff=NFFTx/20;
+%   figure(1)
+%   subplot(2,1,1)
+%   plot(Nx,Xwave);
+%   title('X Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fx(1:cutoff),Yx(1:cutoff));
+%   xlabel('Frequency (Hz)');   
+%   
+%   Ywave=(Ex(nx/2,:,nz/2+10));
+%   ny = length(Ywave);
+%   NFFTy=Gran*ny;
+%   Fsy = 1/dy;         %spatial sampling frequency
+%   Ny = Ly*linspace(0,1,ny); %total space vector
+%   ky=Fsy*linspace(0,2*pi,NFFTy); %wavenumber vector
+%   fy = c*ky/(2*pi);     %frequency vector
+%   Yy = abs(fft(Ywave,NFFTy)/NFFTy);
+%   cutoff=NFFTy/20;
+%   figure(2)
+%   subplot(2,1,1)
+%   plot(Ny,Ywave);
+%   title('Y Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fy(1:cutoff),Yy(1:cutoff));
+%   xlabel('Frequency (Hz)');   
+%   
+%   Zwave=squeeze(Ey(nx/2,ny/2,:));
+%   nz = length(Zwave);
+%   NFFTz=Gran*nz;
+%   Fsz = 1/dz;         %spatial sampling frequency
+%   Nz = Lz*linspace(0,1,nz); %total space vector
+%   kz=Fsz*linspace(0,2*pi,NFFTz); %wavenumber vector
+%   fz = c*kz/(2*pi);     %frequency vector
+%   Yz = abs(fft(Zwave,NFFTz)/NFFTz);
+%   cutoff=NFFTz/20;
+%   figure(3)
+%   subplot(2,1,1)
+%   plot(Nz,Zwave);
+%   title('Z Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fz(1:cutoff),Yz(1:cutoff));
+%   xlabel('Frequency (Hz)');   
+%  
+%   
+%  Gran=100;
+%   Xwave=(Ey(:,70,nz/2+10));
+%   nx = length(Xwave);
+%   NFFTx=Gran*nx;
+%   Fsx = 1/dx;         %spatial sampling frequency
+%   Nx = Lx*linspace(0,1,nx); %total space vector
+%   kx=Fsx*linspace(0,2*pi,NFFTx); %wavenumber vector
+%   fx = c*kx/(2*pi);     %frequency vector
+%   Yx = abs(fft(Xwave,NFFTx)/NFFTx);
+%   cutoff=NFFTx/20;
+%   figure(4)
+%   subplot(2,1,1)
+%   plot(Nx,Xwave);
+%   title('X Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fx(1:cutoff),Yx(1:cutoff));
+%   xlabel('Frequency (Hz)');   
+%   
+%   Ywave=(Ez(nx/2,:,nz/2+10));
+%   ny = length(Ywave);
+%   NFFTy=Gran*ny;
+%   Fsy = 1/dy;         %spatial sampling frequency
+%   Ny = Ly*linspace(0,1,ny); %total space vector
+%   ky=Fsy*linspace(0,2*pi,NFFTy); %wavenumber vector
+%   fy = c*ky/(2*pi);     %frequency vector
+%   Yy = abs(fft(Ywave,NFFTy)/NFFTy);
+%   cutoff=NFFTy/20;
+%   figure(5)
+%   subplot(2,1,1)
+%   plot(Ny,Ywave);
+%   title('Y Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fy(1:cutoff),Yy(1:cutoff));
+%   xlabel('Frequency (Hz)');   
+%   
+%   Zwave=squeeze(Ex(nx/2,ny/2,:));
+%   nz = length(Zwave);
+%   NFFTz=Gran*nz;
+%   Fsz = 1/dz;         %spatial sampling frequency
+%   Nz = Lz*linspace(0,1,nz); %total space vector
+%   kz=Fsz*linspace(0,2*pi,NFFTz); %wavenumber vector
+%   fz = c*kz/(2*pi);     %frequency vector
+%   Yz = abs(fft(Zwave,NFFTz)/NFFTz);
+%   cutoff=NFFTz/20;
+%   figure(6)
+%   subplot(2,1,1)
+%   plot(Nz,Zwave);
+%   title('Z Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fz(1:cutoff),Yz(1:cutoff));
+%   xlabel('Frequency (Hz)');    
+%   
+%   
+%   Gran=100;
+%   Xwave=(Ex(:,ny/2,nz/2+10));
+%   nx = length(Xwave);
+%   NFFTx=Gran*nx;
+%   Fsx = 1/dx;         %spatial sampling frequency
+%   Nx = Lx*linspace(0,1,nx); %total space vector
+%   kx=Fsx*linspace(0,2*pi,NFFTx); %wavenumber vector
+%   fx = c*kx/(2*pi);     %frequency vector
+%   Yx = abs(fft(Xwave,NFFTx)/NFFTx);
+%   cutoff=NFFTx/20;
+%   figure(7)
+%   subplot(2,1,1)
+%   plot(Nx,Xwave);
+%   title('X Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fx(1:cutoff),Yx(1:cutoff));
+%   xlabel('Frequency (Hz)');   
+%   
+%   Ywave=(Ey(nx/2,:,nz/2+10));
+%   ny = length(Ywave);
+%   NFFTy=Gran*ny;
+%   Fsy = 1/dy;         %spatial sampling frequency
+%   Ny = Ly*linspace(0,1,ny); %total space vector
+%   ky=Fsy*linspace(0,2*pi,NFFTy); %wavenumber vector
+%   fy = c*ky/(2*pi);     %frequency vector
+%   Yy = abs(fft(Ywave,NFFTy)/NFFTy);
+%   cutoff=NFFTy/20;
+%   figure(8)
+%   subplot(2,1,1)
+%   plot(Ny,Ywave);
+%   title('Y Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fy(1:cutoff),Yy(1:cutoff));
+%   xlabel('Frequency (Hz)');   
+%   
+%   Zwave=squeeze(Ez(nx/2,ny/2,:));
+%   nz = length(Zwave);
+%   NFFTz=Gran*nz;
+%   Fsz = 1/dz;         %spatial sampling frequency
+%   Nz = Lz*linspace(0,1,nz); %total space vector
+%   kz=Fsz*linspace(0,2*pi,NFFTz); %wavenumber vector
+%   fz = c*kz/(2*pi);     %frequency vector
+%   Yz = abs(fft(Zwave,NFFTz)/NFFTz);
+%   cutoff=NFFTz/20;
+%   figure(9)
+%   subplot(2,1,1)
+%   plot(Nz,Zwave);
+%   title('Z Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fz(1:cutoff),Yz(1:cutoff));
+%   xlabel('Frequency (Hz)');   
+%   
+%   %==============Magnetic Plots
+%   
+%   Xwave=(Hy(:,ny/2,nz/2+10));
+%   nx = length(Xwave);
+%   NFFTx=Gran*nx;
+%   Fsx = 1/dx;         %spatial sampling frequency
+%   Nx = Lx*linspace(0,1,nx); %total space vector
+%   kx=Fsx*linspace(0,2*pi,NFFTx); %wavenumber vector
+%   fx = c*kx/(2*pi);     %frequency vector
+%   Yx = abs(fft(Xwave,NFFTx)/NFFTx);
+%   cutoff=NFFTx/20;
+%   figure(10)
+%  subplot(2,1,1)
+%   plot(Nx,Xwave);
+%   title('X Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fx(1:cutoff),Yx(1:cutoff));
+%   xlabel('Frequency (Hz)');  
+%   
+%   Ywave=(Hz(nx/2,:,nz/2+10));
+%   ny = length(Ywave);
+%   NFFTy=Gran*ny;
+%   Fsy = 1/dy;         %spatial sampling frequency
+%   Ny = Ly*linspace(0,1,ny); %total space vector
+%   ky=Fsy*linspace(0,2*pi,NFFTy); %wavenumber vector
+%   fy = c*ky/(2*pi);     %frequency vector
+%   Yy = abs(fft(Ywave,NFFTy)/NFFTy);
+%   cutoff=NFFTy/20;
+%   figure(11)
+%   subplot(2,1,1)
+%   plot(Ny,Ywave);
+%   title('Y Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fy(1:cutoff),Yy(1:cutoff));
+%   xlabel('Frequency (Hz)');   
+%   
+%   Zwave=squeeze(Hx(nx/2,ny/2,:));
+%   nz = length(Zwave);
+%   NFFTz=Gran*nz;
+%   Fsz = 1/dz;         %spatial sampling frequency
+%   Nz = Lz*linspace(0,1,nz); %total space vector
+%   kz=Fsz*linspace(0,2*pi,NFFTz); %wavenumber vector
+%   fz = c*kz/(2*pi);     %frequency vector
+%   Yz = abs(fft(Zwave,NFFTz)/NFFTz);
+%   cutoff=NFFTz/20;
+%   figure(12)
+%   subplot(2,1,1)
+%   plot(Nz,Zwave);
+%   title('Z Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fz(1:cutoff),Yz(1:cutoff));
+%   xlabel('Frequency (Hz)');   
+%   
+% Xwave=(Hz(:,ny/2,nz/2+10));
+%   nx = length(Xwave);
+%   NFFTx=Gran*nx;
+%   Fsx = 1/dx;         %spatial sampling frequency
+%   Nx = Lx*linspace(0,1,nx); %total space vector
+%   kx=Fsx*linspace(0,2*pi,NFFTx); %wavenumber vector
+%   fx = c*kx/(2*pi);     %frequency vector
+%   Yx = abs(fft(Xwave,NFFTx)/NFFTx);
+%   cutoff=NFFTx/20;
+%   figure(13)
+%  subplot(2,1,1)
+%   plot(Nx,Xwave);
+%   title('X Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fx(1:cutoff),Yx(1:cutoff));
+%   xlabel('Frequency (Hz)');  
+%   
+%   Ywave=(Hx(nx/2,:,nz/2+10));
+%   ny = length(Ywave);
+%   NFFTy=Gran*ny;
+%   Fsy = 1/dy;         %spatial sampling frequency
+%   Ny = Ly*linspace(0,1,ny); %total space vector
+%   ky=Fsy*linspace(0,2*pi,NFFTy); %wavenumber vector
+%   fy = c*ky/(2*pi);     %frequency vector
+%   Yy = abs(fft(Ywave,NFFTy)/NFFTy);
+%   cutoff=NFFTy/20;
+%   figure(14)
+%   subplot(2,1,1)
+%   plot(Ny,Ywave);
+%   title('Y Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fy(1:cutoff),Yy(1:cutoff));
+%   xlabel('Frequency (Hz)');   
+%   
+%   Zwave=squeeze(Hy(nx/2,ny/2,:));
+%   nz = length(Zwave);
+%   NFFTz=Gran*nz;
+%   Fsz = 1/dz;         %spatial sampling frequency
+%   Nz = Lz*linspace(0,1,nz); %total space vector
+%   kz=Fsz*linspace(0,2*pi,NFFTz); %wavenumber vector
+%   fz = c*kz/(2*pi);     %frequency vector
+%   Yz = abs(fft(Zwave,NFFTz)/NFFTz);
+%   cutoff=NFFTz/20;
+%   figure(15)
+%   subplot(2,1,1)
+%   plot(Nz,Zwave);
+%   title('Z Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fz(1:cutoff),Yz(1:cutoff));
+%   xlabel('Frequency (Hz)');  
+%   
+%   Xwave=(Hx(:,ny/2,nz/2+10));
+%   nx = length(Xwave);
+%   NFFTx=Gran*nx;
+%   Fsx = 1/dx;         %spatial sampling frequency
+%   Nx = Lx*linspace(0,1,nx); %total space vector
+%   kx=Fsx*linspace(0,2*pi,NFFTx); %wavenumber vector
+%   fx = c*kx/(2*pi);     %frequency vector
+%   Yx = abs(fft(Xwave,NFFTx)/NFFTx);
+%   cutoff=NFFTx/20;
+%   figure(16)
+%  subplot(2,1,1)
+%   plot(Nx,Xwave);
+%   title('X Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fx(1:cutoff),Yx(1:cutoff));
+%   xlabel('Frequency (Hz)');  
+%   
+%   Ywave=(Hy(nx/2,:,nz/2+10));
+%   ny = length(Ywave);
+%   NFFTy=Gran*ny;
+%   Fsy = 1/dy;         %spatial sampling frequency
+%   Ny = Ly*linspace(0,1,ny); %total space vector
+%   ky=Fsy*linspace(0,2*pi,NFFTy); %wavenumber vector
+%   fy = c*ky/(2*pi);     %frequency vector
+%   Yy = abs(fft(Ywave,NFFTy)/NFFTy);
+%   cutoff=NFFTy/20;
+%   figure(17)
+%   subplot(2,1,1)
+%   plot(Ny,Ywave);
+%   title('Y Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fy(1:cutoff),Yy(1:cutoff));
+%   xlabel('Frequency (Hz)');   
+%   
+%   Zwave=squeeze(Hz(nx/2,ny/2,:));
+%   nz = length(Zwave);
+%   NFFTz=Gran*nz;
+%   Fsz = 1/dz;         %spatial sampling frequency
+%   Nz = Lz*linspace(0,1,nz); %total space vector
+%   kz=Fsz*linspace(0,2*pi,NFFTz); %wavenumber vector
+%   fz = c*kz/(2*pi);     %frequency vector
+%   Yz = abs(fft(Zwave,NFFTz)/NFFTz);
+%   cutoff=NFFTz/20;
+%   figure(18)
+%   subplot(2,1,1)
+%   plot(Nz,Zwave);
+%   title('Z Directed Wave');
+%   xlabel('Distance (m)');
+%   subplot(2,1,2)
+%   plot(fz(1:cutoff),Yz(1:cutoff));
+%   xlabel('Frequency (Hz)');  
